@@ -20,13 +20,13 @@ export class AuthService {
     }
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(dto.password, saltRounds);
-
+    const dreams = Array.isArray(dto.dreams) ? dto.dreams : [];
     const user = await this.prisma.user.create({
       data: {
         name: dto.name,
         email: dto.email,
         passwordHash: hashedPassword,
-        dreams: dto.dreams,
+        dreams,
       },
     });
 
