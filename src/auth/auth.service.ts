@@ -1,15 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { JwtService } from '@nestjs/jwt';
 import { LoginDto } from './dto/login.dto';
+import { MailService } from '../mail/mail.service';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly mailService: MailService,
   ) {}
   async register(dto: CreateUserDto) {
     const existing = await this.prisma.user.findUnique({
@@ -31,6 +34,9 @@ export class AuthService {
     });
 
     const { passwordHash, ...safeUser } = user;
+    const subject = 'Добро пожаловать на Dreamsnote!';
+    const html = `<p>Здравствуйте, ${user.name}!</p><p>Спасибо за регистрацию. Добро пожаловать в приложение.</p>`;
+    await this.mailService.sendMail(user.email, subject, html);
     return { user: safeUser };
   }
 
@@ -58,5 +64,48 @@ export class AuthService {
     const { passwordHash, ...safeUser } = user;
     return { accessToken: token, user: safeUser };
   }
+
+  async forgotPassword(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return;
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 1000 * 60 * 60);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetToken: token,
+        resetTokenExpires: expires,
+      },
+    });
+    const resetLink = `https://dreamsnote.ru/reset-password?token=${token}&id=${user.id}`;
+    const subject = 'Сброс пароля';
+    const html = `<p>Чтобы сбросить пароль, перейдите по ссылке: <a href="${resetLink}">${resetLink}</a></p><p>Срок действия ссылки — 1 час.</p>`;
+    await this.mailService.sendMail(user.email, subject, html);
+  }
   
+  async resetPassword(id: number, token: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new Error('User not found');
+    }
+    if (user.resetToken !== token) {
+      throw new Error('Invalid or expired token');
+    }
+    if (!user.resetTokenExpires || user.resetTokenExpires < new Date()) {
+      throw new Error('Token expired');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    await this.prisma.user.update({
+      where: { id },
+      data: {
+        passwordHash: hashedPassword,
+        resetToken: null,
+        resetTokenExpires: null,
+      },
+    });
+  }
 }

@@ -3,6 +3,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtModule } from '@nestjs/jwt';
+import { MailService } from '../mail/mail.service';
 
 
 @Module({
@@ -13,6 +14,6 @@ import { JwtModule } from '@nestjs/jwt';
     })
   ],
   controllers: [AuthController],
-  providers: [AuthService, PrismaService]
+  providers: [AuthService, PrismaService, MailService]
 })
 export class AuthModule {}
